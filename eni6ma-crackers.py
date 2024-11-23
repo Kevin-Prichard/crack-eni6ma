@@ -38,8 +38,13 @@ PANELS_CHAR_LEN = 96
 PANEL_LEN = PANELS_CHAR_LEN // 4
 EMPTY_STR = ""
 
+
 def rand_i32(upper_bound: int) -> Generator[int, None, int]:
-    # returns random integer in the range: 0 .. upper_bound - 1
+    """ Return a random integer in the range: 0 .. upper_bound - 1
+        Utilises *nix system random number generator,
+        which is typically hardware-generated on modern CPUs,
+        and presumed to be of more even distribution compared to PRNGs.
+    """
     with open("/dev/random", "rb") as rand_raw:  # ash
         while True:
             rand_val = abs(struct.unpack("I", rand_raw.read(4))[0])
@@ -47,9 +52,11 @@ def rand_i32(upper_bound: int) -> Generator[int, None, int]:
 
 
 def gen_4panels():
+    # container for the randomized charset that will become the four panels
     randchars = [EMPTY_STR] * 24 * 4
     cp = 0
 
+    # randomize the charset
     while cp < ASCII_LEN:
         while True:
             ptr = next(rand_i32(PANELS_CHAR_LEN))
@@ -58,10 +65,14 @@ def gen_4panels():
         randchars[ptr] = ASCII[cp]
         cp += 1
 
+    # Now break the randomized character set into four panels of n/4 chars each
     return ["".join(randchars[i * PANEL_LEN:(i + 1) * PANEL_LEN]) for i in range(4)]
 
 
 def perform_many_logins(passcode: str, end_after_iters: int) -> List[List[str]]:
+    """ Run a bunch of login attempts, ending upon end_after_iters attempts """
+
+    # collect the number of repeats of button press patterns (useless info as panels are randomized)
     entries = dd(int)
     panelsets = []
     iters = 0
@@ -69,6 +80,7 @@ def perform_many_logins(passcode: str, end_after_iters: int) -> List[List[str]]:
     while iters < end_after_iters:
         entry = []
         panelset = []
+
         # user entering a letter of their pin, password, passphrase..
         for c in passcode:
 
@@ -77,19 +89,31 @@ def perform_many_logins(passcode: str, end_after_iters: int) -> List[List[str]]:
 
             # user identifies which panel c exists in
             for panelnum in range(4):
-                if t := c in p4[panelnum]:
-                    # record panel number
+                # user's knowledge of their passcode and current character position is
+                # emulated here by checking each panel for the current user-known character
+
+                if did_find := c in p4[panelnum]:
+                    # once we've found the correct panel, acting also as observer we-
+                    # 1. record the button number the user pressed
                     entry.append(str(panelnum))
 
-                    # record the panel in which correct pw char appeared
+                    # 2. record the panel the user indicated with the button press
                     panelset.append(p4[panelnum])
 
-                    break
-            assert t
+                    """ This is the sort of info a hacker would collect with a camera, 
+                        or a keyboard sniffer and screen-copy util etc. """
 
-        # count occurrences of passed keypresses
+                    # panel found, exit early
+                    break
+
+            # ensure that a panel is always found (hasn't failed yet)
+            assert did_find
+
+        # count occurrences of keypress patterns
         entries["".join(entry)] += 1
         iters += 1
+
+        # accumulate panelsets, where each len(panelset) is equal to len(args.password)
         panelsets.append(panelset)
 
         # report a rise in repeats
@@ -101,14 +125,25 @@ def perform_many_logins(passcode: str, end_after_iters: int) -> List[List[str]]:
 
 def analyse_login_attempts(panelsets):
     pw_len = len(args.password)
+
+    # Convert the first login session's panels to a list of sets
+    # one set per panel, one panel per password character position
     panels_merged = [set(panelsets[0][i]) for i in range(pw_len)]
-    for panel_idx, panelset in enumerate(panelsets[1:]):
+
+    # Now, compare user-selected panels across sessions via set intersection
+    for login_session_idx, panelset in enumerate(panelsets[1:]):
         for pn in range(pw_len):
             panels_merged[pn].intersection_update(panelset[pn])
-        if (wut := sum(len(panels_merged[i]) for i in range(pw_len))) == pw_len:
+
+        # How many characters left after intersection?
+        intersected_charsset_len = sum(len(panels_merged[i]) for i in range(pw_len))
+
+        # Have we reached the user's password length?  Then exit
+        if intersected_charsset_len == pw_len:
             break
 
-    return panels_merged, panel_idx + 1
+    # This should equal the user's password, and the number of login sessions reviewed
+    return panels_merged, login_session_idx + 1
 
 
 def main(argv):
@@ -121,10 +156,15 @@ def main(argv):
     # intersect snapshotted panels to find pw
     merged, actual_iters = analyse_login_attempts(panelsets)
 
-    # print the password
+    # Join the sets resulting from analysis
     password_merged = "".join("".join(c for c in panel) for panel in merged)
+
+    # Does the joined reduced sets match the supplied password?
     matched = password_merged == args.password
-    print(f"Password discovered: {password_merged}, matches pw input? {matched}, cracked after n login sessions: {actual_iters}")
+
+    # print the password and results
+    print(f"Password discovered: {password_merged}, matches pw input? {matched}, "
+          f"cracked after n login sessions: {actual_iters}")
 
 
 if __name__ == "__main__":
