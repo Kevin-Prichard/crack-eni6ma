@@ -25,5 +25,26 @@ In eni6ma-crackers.py, I attempted to recreate the 4-panel, randomized selection
 In `analyse_login_attempts()`, we review the collected panel snapshots by intersecting them as sets, from across all the login sessions and for each character position of the password under consideration.  The purpose here is to throw away characters that are not the same per password character position, retaining only the character(s) that match across login sessions.  When the number of intersected characters per position reaches 1, the review is finished and returns.
 
 
+## Installation
+1. Ensure you have at least Python 3.10 installed
+2. Check out this repository to your system
+3. Optionally create a virtual environment-
+  ```
+  $ python3 -m venv venv
+  $ source venv/bin/activate
+  ```
+4. Install dependencies-
+  ```
+  $ pip install -r requirements.txt
+  ```
+
+
+## Execute the script
+```
+$ ./eni6ma-crackers.py -p "<password here>"
+# for example
+$ ./eni6ma-crackers.py -p "0000"
+```
+
 ## Results
 ... to be determined following review ...
